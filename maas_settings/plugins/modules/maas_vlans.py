@@ -131,7 +131,7 @@ message:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.rhc.maas_settings.plugins.module_utils.common import (
+from ansible_collections.rhc.maas_settings.plugins.module_utils.maas_common import (
     maas_api_cred,
     grab_maas_api_key,
 )
