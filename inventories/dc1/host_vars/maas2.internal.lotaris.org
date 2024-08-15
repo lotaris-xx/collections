@@ -1,1 +1,0 @@
-maas_site: "http://maas2.internal.lotaris.org:5240/MAAS"
