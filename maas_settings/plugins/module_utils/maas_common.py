@@ -1,4 +1,10 @@
 #!/usr/bin/python
+try:
+    from requests import post, exceptions
+
+    HAS_REQUESTS = True
+except:
+    HAS_REQUESTS = False
 
 
 class maas_api_cred:
