@@ -1,7 +1,5 @@
 #!/usr/bin/python
 
-# Copyright: Allen Smith <asmith687@t-mobile.com>
-# License: MIT-0 (See https://opensource.org/license/mit-0)
 from __future__ import absolute_import, division, print_function
 from ansible.module_utils.basic import missing_required_lib
 
