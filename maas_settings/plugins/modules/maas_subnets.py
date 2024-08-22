@@ -498,19 +498,21 @@ def validate_module_parameters(module):
         try:
             new_list = []
 
-            for dns_server in subnet["dns_servers"]:
-                if (dns_list := dns_server.split()) != dns_server:
-                    new_list += dns_list
-                else:
-                    new_list.append(dns_server)
-
-            subnet["dns_servers"] = new_list
+            if isinstance(subnet["dns_servers"], str):
+                if (new_list := subnet["dns_servers"].split(" ")) != subnet[
+                    "dns_servers"
+                ]:
+                    subnet["dns_servers"] = new_list
 
             for dns_server in subnet["dns_servers"]:
                 dns_address = ip_address(dns_server)
 
         except ValueError as e:
-            module.fail_json(msg="DNS address is invalid: {}".format(str(e)))
+            module.fail_json(
+                msg="DNS address is invalid: {} {}".format(
+                    str(e), subnet["dns_servers"]
+                )
+            )
 
         try:
             if subnet["gateway_ip"]:
