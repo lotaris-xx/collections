@@ -496,6 +496,16 @@ def validate_module_parameters(module):
             module.fail_json(msg="CIDR address is invalid: {}".format(str(e)))
 
         try:
+            new_list = []
+
+            for dns_server in subnet["dns_servers"]:
+                if (dns_list := dns_server.split()) != dns_server:
+                    new_list += dns_list
+                else:
+                    new_list.append(dns_server)
+
+            subnet["dns_servers"] = new_list
+
             for dns_server in subnet["dns_servers"]:
                 dns_address = ip_address(dns_server)
 
