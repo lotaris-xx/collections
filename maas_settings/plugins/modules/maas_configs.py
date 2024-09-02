@@ -164,7 +164,7 @@ def run_module():
     current_configs = {}
     # For each config setting
     for setting in configs:
-        matching_setting = lookup_config(setting, module)
+        matching_setting = lookup_config(maas_session, setting, module)
         current_configs.update(matching_setting)
 
         # If the setting needs to be updated
