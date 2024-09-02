@@ -107,7 +107,7 @@ def lookup_config(session, lookup, module):
         )
 
 
-def maas_update_config(session, setting, module):
+def maas_update_config(session, configs, setting, module, res):
     """
     Update a given config
     """
@@ -116,21 +116,21 @@ def maas_update_config(session, setting, module):
     if not module.check_mode:
         payload = {
             "op": "set_config",
-            "name": setting.key(),
-            "value": setting.value(),
+            "name": setting,
+            "value": configs[setting],
         }
         try:
-            r = session.put(
+            r = session.post(
                 f"{module.params['site']}/api/2.0/maas/",
                 data=payload,
             )
             r.raise_for_status()
         except exceptions.RequestException as e:
             module.fail_json(
-                msg=f"config Update Failed: {format(str(e))} with payload {format(payload)} and {format(setting)}"
+                msg=f"config Update Failed: {format(str(e))} with payload {format(payload)}"
             )
 
-    res["message"].append("Updated config: " + str(configlist_updated))
+    res["message"].append("Updated config: " + str(setting))
 
 
 def run_module():
@@ -164,24 +164,26 @@ def run_module():
     configs = module.params["configs"]
 
     current_configs = {}
-    # For each config setting
+
     for setting in configs:
-        matching_setting = lookup_config(maas_session, setting, module)
+        matching_setting = {setting: lookup_config(maas_session, setting, module)}
         current_configs.update(matching_setting)
 
-        # If the setting needs to be updated
-        if configs[setting] != matching_setting.value():
-            # Update the setting
+        if configs[setting] != matching_setting[setting]:
             maas_update_config(
                 maas_session,
+                configs,
                 setting,
                 module,
+                result,
             )
 
     result["diff"] = dict(
         before=safe_dump(current_configs),
         after=safe_dump(configs),
     )
+
+    module.exit_json(**result)
 
 
 def main():
