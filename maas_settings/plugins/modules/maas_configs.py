@@ -92,8 +92,9 @@ def lookup_config(session, lookup, module):
     """
     try:
 
+        payload = {"name": lookup}
         current_config = session.get(
-            f"{module.params['site']}/api/2.0/maas/op-get_config", params=lookup
+            f"{module.params['site']}/api/2.0/maas/op-get_config", params=payload
         )
 
         current_config.raise_for_status()
