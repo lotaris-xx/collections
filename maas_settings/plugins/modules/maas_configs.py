@@ -149,8 +149,6 @@ def run_module():
     if not HAS_REQUESTS_OAUTHLIB:
         module.fail_json(msg=missing_required_lib("requests_oauthlib"))
 
-    validate_module_parameters(module)
-
     response = grab_maas_apikey(module)
     api_cred = maas_api_cred(response.json())
 
@@ -182,21 +180,6 @@ def run_module():
         before=safe_dump(current_configs),
         after=safe_dump(configs),
     )
-
-
-def validate_module_parameters(module):
-    """
-    Perform simple validations on module parameters
-    """
-
-    import string
-
-    configs = module.params["configs"]
-    for setting in configs:
-        if any(c in configs[setting] for c in string.whitespace):
-            module.fail_json(
-                msg=f"config setting names can not contain whitespace, found {config}"
-            )
 
 
 def main():
