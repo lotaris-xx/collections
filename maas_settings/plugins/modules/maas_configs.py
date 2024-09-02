@@ -20,20 +20,18 @@ try:
 except:
     HAS_REQUESTS_OAUTHLIB = False
 
-TAG_SUPPORTED_KEYS = ["name", "comment", "definition", "kernel_opts"]
-TAG_MODIFY_KEYS = ["comment", "definition", "kernel_opts"]
-
 __metaclass__ = type
 
 DOCUMENTATION = r"""
 ---
-module: maas_tags
+module: maas_configs
 
-short_description: Configure MAAS tags
+short_description: Set MAAS configs
 
 version_added: "1.0.0"
 
-description: Configure MAAS tags
+description: Given a list of MAAS config settings, this module will compare that list to the
+             current settings and update them if needed.
 
 options:
     password:
@@ -44,45 +42,23 @@ options:
         description: URL of the MAAS site (generally ending in /MAAS)
         required: true
         type: str
-    state:
-        description:
-          - if C(absent) then the tag(s) will be removed if currently present.
-          - if C(present) then the tag(s) will be created/updated.
-          - if C(exact) then the resulting tag list will match what is passed in.
-        required: false
-        type: str
-        default: present
-        choices: [ absent, present, exact ]
     username:
         description: Username to get API token for
         required: true
         type: str
-    tags:
-        description: A list containing tag specifier dictionaries
+    configs:
+        description: A list containing config specifier dictionaries
         required: true
         type: list
         suboptions:
           name:
-              description: The name of the tag (used in URLs, so should be short and follow rules for components of a URL)
+              description: The name of the MAAS config setting
               required: true
               type: str
-          comment:
-              description: A description of what the the tag will be used for in natural language
-              required: false
-              type: str
-          definition:
-              description: An XPATH query that is evaluated against the hardware_details stored for all nodes (i.e. the output of lshw -xml).
-              required: false
-              type: str
-          kernel_opts:
-              description: Nodes associated with this tag will add this string to their kernel options when booting.
-                           The value overrides the global kernel_opts setting. If more than one tag is associated with a node,
-                           command line will be concatenated from all associated tags, in alphabetic tag name order.
-              required: false
-              type: int
 
 notes:
-    - Source puppet facts use only names, so that code is most tested.
+    - The configs are always defined on the server, even if an empty value
+    - It isn't possible to get a list of all keys, so must look at MAAS server or MAAS API docs for valid values.
 
 requirements:
    - requests
@@ -93,14 +69,12 @@ author:
 """
 
 EXAMPLES = r"""
-# Add/Remove as needed to exactly match given list
--  maas_tags:
+# Add/Remove as needed to exactly match given dictionary
+-  maas_configs:
      username: user
      password: password
-     state: exact
-     tags:
-       - name: first_tag
-       - name: another_tag
+     configs:
+       network_discovery: "disabled"
 """
 
 RETURN = r"""
@@ -117,16 +91,16 @@ from ansible_collections.rhc.maas_settings.plugins.module_utils.maas_common impo
 )
 
 
-def tag_needs_updating(current, wanted, module):
+def config_needs_updating(current, wanted, module):
     """
-    Compare two tag definitions and see if there are differences
+    Compare two config definitions and see if there are differences
     in the fields we allow to be changed
     """
 
     ret = False
 
-    current_filtered = {k: v for k, v in current.items() if k in TAG_MODIFY_KEYS}
-    wanted_filtered = {k: v for k, v in wanted.items() if k in TAG_MODIFY_KEYS}
+    current_filtered = {k: v for k, v in current.items() if k in CONFIG_MODIFY_KEYS}
+    wanted_filtered = {k: v for k, v in wanted.items() if k in CONFIG_MODIFY_KEYS}
 
     if sorted(current_filtered) != sorted(wanted_filtered):
         ret = True
@@ -138,212 +112,127 @@ def tag_needs_updating(current, wanted, module):
     return ret
 
 
-def get_maas_tags(session, module):
+def get_maas_configs(session, module):
     """
-    Grab the current list of tags
+    Grab the current list of configs
     """
     try:
-        filtered_tags = []
-        current_tags = session.get(f"{module.params['site']}/api/2.0/tags/")
-        current_tags.raise_for_status()
+        filtered_configs = []
+        current_configs = session.get(f"{module.params['site']}/api/2.0/configs/")
+        current_configs.raise_for_status()
 
         # filter the list down to keys we support
-        for tag in current_tags.json():
-            filtered_tags.append(
-                {k: v for k, v in tag.items() if k in TAG_SUPPORTED_KEYS}
+        for config in current_configs.json():
+            filtered_configs.append(
+                {k: v for k, v in config.items() if k in CONFIG_SUPPORTED_KEYS}
             )
-        return filtered_tags
+        return filtered_configs
     except exceptions.RequestException as e:
-        module.fail_json(msg="Failed to get current tag list: {}".format(str(e)))
+        module.fail_json(msg="Failed to get current config list: {}".format(str(e)))
 
 
-def lookup_tag(lookup, current_tags, module):
+def lookup_config(lookup, current_configs, module):
     """
-    Given a lookup return a tag if the lookup
-    matches a current tag
+    Given a lookup return a config if the lookup
+    matches a current config
     """
 
-    if lookup["name"] in current_tags.keys():
-        return current_tags[lookup["name"]]
+    if lookup["name"] in current_configs.keys():
+        return current_configs[lookup["name"]]
 
     return None
 
 
-def maas_add_tags(session, current_tags, module_tags, module, res):
+def maas_update_configs(session, current_configs, module_configs, module, res):
     """
-    Given a list of tags to add, we add those that don't exist
+    Given a list of configs to add, we add those that don't exist
     If they exist, we check if something has changed and if it
     is a parameter that we can update, we call a function to do
     that.
     """
-    taglist_added = []
-    taglist_updated = []
+    configlist_added = []
+    configlist_updated = []
 
-    for tag in module_tags:
-        if (matching_tag := lookup_tag(tag, current_tags, module)) is None:
-            taglist_added.append(tag)
+    for config in module_configs:
+        if (matching_config := lookup_config(config, current_configs, module)) is None:
+            configlist_added.append(config)
             res["changed"] = True
 
             if not module.check_mode:
                 payload = {
-                    "name": tag["name"],
-                    "comment": tag["comment"] if "comment" in tag.keys() else "",
+                    "name": config["name"],
+                    "comment": config["comment"] if "comment" in config.keys() else "",
                     "definition": (
-                        tag["definition"] if "definition" in tag.keys() else ""
+                        config["definition"] if "definition" in config.keys() else ""
                     ),
                     "kernel_opts": (
-                        tag["kernel_opts"] if "kernel_opts" in tag.keys() else ""
+                        config["kernel_opts"] if "kernel_opts" in config.keys() else ""
                     ),
                 }
                 try:
                     r = session.post(
-                        f"{module.params['site']}/api/2.0/tags/",
+                        f"{module.params['site']}/api/2.0/configs/",
                         data=payload,
                     )
                     r.raise_for_status()
                 except exceptions.RequestException as e:
                     module.fail_json(
-                        msg=f"tag Add Failed: {format(str(e))} with payload {format(payload)} and {format(tag)}"
+                        msg=f"config Add Failed: {format(str(e))} with payload {format(payload)} and {format(config)}"
                     )
         else:
-            if tag_needs_updating(matching_tag, tag, module):
-                taglist_updated.append(tag)
+            if config_needs_updating(matching_config, config, module):
+                configlist_updated.append(config)
                 res["changed"] = True
 
                 if not module.check_mode:
                     payload = {
-                        "comment": (tag["comment"] if "comment" in tag.keys() else ""),
+                        "comment": (
+                            config["comment"] if "comment" in config.keys() else ""
+                        ),
                         "definition": (
-                            tag["definition"] if "definition" in tag.keys() else ""
+                            config["definition"]
+                            if "definition" in config.keys()
+                            else ""
                         ),
                         "kernel_opts": (
-                            tag["kernel_opts"] if "kernel_opts" in tag.keys() else ""
+                            config["kernel_opts"]
+                            if "kernel_opts" in config.keys()
+                            else ""
                         ),
                     }
                     try:
                         r = session.put(
-                            f"{module.params['site']}/api/2.0/tags/{tag['name']}/",
+                            f"{module.params['site']}/api/2.0/configs/{config['name']}/",
                             data=payload,
                         )
                         r.raise_for_status()
                     except exceptions.RequestException as e:
                         module.fail_json(
-                            msg=f"tag Update Failed: {format(str(e))} with payload {format(payload)} and {format(tag)}"
+                            msg=f"config Update Failed: {format(str(e))} with payload {format(payload)} and {format(config)}"
                         )
 
-    new_tags_dict = {item["name"]: item for item in get_maas_tags(session, module)}
+    new_configs_dict = {
+        item["name"]: item for item in get_maas_configs(session, module)
+    }
 
     res["diff"] = dict(
-        before=safe_dump(current_tags),
-        after=safe_dump(new_tags_dict),
+        before=safe_dump(current_configs),
+        after=safe_dump(new_configs_dict),
     )
 
-    if taglist_added:
-        res["message"].append("Added tags: " + str(taglist_added))
+    if configlist_added:
+        res["message"].append("Added configs: " + str(configlist_added))
 
-    if taglist_updated:
-        res["message"].append("Updated tags: " + str(taglist_updated))
-
-
-def maas_delete_all_tags(session, current_tags, module, res):
-    """
-    Delete all tags
-    """
-    taglist = []
-
-    for item in current_tags:
-        taglist.append(item)
-        res["changed"] = True
-
-        if not module.check_mode:
-            try:
-                r = session.delete(
-                    f"{module.params['site']}/api/2.0/tags/{item}/",
-                )
-                r.raise_for_status()
-            except exceptions.RequestException as e:
-                module.fail_json(
-                    msg=f"tag Remove Failed: {format(str(e))} with {format(current_tags)}"
-                )
-
-            new_tags_dict = {
-                item["name"]: item for item in get_maas_tags(session, module)
-            }
-
-            res["diff"] = dict(
-                before=safe_dump(current_tags),
-                after=safe_dump(new_tags_dict),
-            )
-
-    if taglist:
-        res["message"].append("Removed tags: " + str(taglist))
-
-
-def maas_delete_tags(session, current_tags, module_tags, module, res):
-    """
-    Given a list of tags to remove, we delete those that exist"
-    """
-    taglist = []
-
-    for tag in module_tags:
-        if (matching_tag := lookup_tag(tag, current_tags, module)) is not None:
-            taglist.append(tag["name"])
-            res["changed"] = True
-
-            if not module.check_mode:
-                try:
-                    r = session.delete(
-                        f"{module.params['site']}/api/2.0/tags/{tag['name']}/",
-                    )
-                    r.raise_for_status()
-                except exceptions.RequestException as e:
-                    module.fail_json(
-                        msg=f"tag Remove Failed: {format(str(e))} with {format(current_tags)}"
-                    )
-
-                new_tags_dict = {
-                    item["name"]: item for item in get_maas_tags(session, module)
-                }
-
-                res["diff"] = dict(
-                    before=safe_dump(current_tags),
-                    after=safe_dump(new_tags_dict),
-                )
-
-    if taglist:
-        res["message"].append("Removed tags: " + str(taglist))
-
-
-def maas_exact_tags(session, current_tags, module_tags, module, res):
-    """
-    Given a list of tags, remove and add/update as needed
-    to make reality match the list
-    """
-    wanted = []
-    delete_list = []
-
-    module_tags_dict = {k["name"]: k for k in module_tags}
-
-    wanted = module_tags_dict.keys()
-
-    delete_list = [
-        current_tags[tag] for tag in current_tags.keys() if tag not in wanted
-    ]
-
-    if delete_list:
-        maas_delete_tags(session, current_tags, delete_list, module, res)
-
-    if wanted:
-        maas_add_tags(session, current_tags, module_tags, module, res)
+    if configlist_updated:
+        res["message"].append("Updated configs: " + str(configlist_updated))
 
 
 def run_module():
     module_args = dict(
-        tags=dict(type="list", required=True),
+        configs=dict(type="dict", required=True),
         password=dict(type="str", required=True, no_log=True),
         username=dict(type="str", required=True),
         site=dict(type="str", required=True),
-        state=dict(type="str", required=False, default="present"),
     )
 
     result = dict(changed=False, message=[], diff={})
@@ -368,59 +257,43 @@ def run_module():
         signature_method="PLAINTEXT",
     )
 
-    current_tags_dict = {
-        item["name"]: item for item in get_maas_tags(maas_session, module)
+    current_configs_dict = {
+        item["name"]: item for item in get_maas_configs(maas_session, module)
     }
 
     if module.params["state"] == "present":
-        maas_add_tags(
+        maas_add_configs(
             maas_session,
-            current_tags_dict,
-            module.params["tags"],
+            current_configs_dict,
+            module.params["configs"],
             module,
             result,
         )
 
     elif module.params["state"] == "absent":
-        maas_delete_tags(
+        maas_delete_configs(
             maas_session,
-            current_tags_dict,
-            module.params["tags"],
+            current_configs_dict,
+            module.params["configs"],
             module,
             result,
         )
 
     elif module.params["state"] == "exact":
-        if module.params["tags"]:
-            maas_exact_tags(
+        if module.params["configs"]:
+            maas_exact_configs(
                 maas_session,
-                current_tags_dict,
-                module.params["tags"],
+                current_configs_dict,
+                module.params["configs"],
                 module,
                 result,
             )
-        else:
-            maas_delete_all_tags(
-                maas_session,
-                current_tags_dict,
-                module,
-                result,
+        configs = module.params["configs"]
+    for config in configs:
+        if any(c in config["name"] for c in string.whitespace):
+            module.fail_json(
+                msg=f"config names can not contain whitespace, found {config}"
             )
-
-    module.exit_json(**result)
-
-
-def validate_module_parameters(module):
-    """
-    Perform simple validations on module parameters
-    """
-
-    import string
-
-    tags = module.params["tags"]
-    for tag in tags:
-        if any(c in tag["name"] for c in string.whitespace):
-            module.fail_json(msg=f"Tag names can not contain whitespace, found {tag}")
 
 
 def main():
