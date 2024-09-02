@@ -92,9 +92,9 @@ def lookup_config(session, lookup, module):
     """
     try:
 
-        payload = {"name": lookup}
+        payload = {"op": "get_config", "name": lookup}
         current_config = session.get(
-            f"{module.params['site']}/api/2.0/maas/op-get_config", params=payload
+            f"{module.params['site']}/api/2.0/maas/", params=payload
         )
 
         current_config.raise_for_status()
@@ -115,12 +115,13 @@ def maas_update_config(session, setting, module):
 
     if not module.check_mode:
         payload = {
+            "op": "set_config",
             "name": setting.key(),
             "value": setting.value(),
         }
         try:
             r = session.put(
-                f"{module.params['site']}/api/2.0/maas/maas/op-set_config",
+                f"{module.params['site']}/api/2.0/maas/",
                 data=payload,
             )
             r.raise_for_status()
