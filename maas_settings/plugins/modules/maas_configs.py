@@ -86,7 +86,7 @@ from ansible_collections.rhc.maas_settings.plugins.module_utils.maas_common impo
 )
 
 
-def lookup_config(lookup, module):
+def lookup_config(session, lookup, module):
     """
     Given a lookup return the current config if the lookup succeds
     """
