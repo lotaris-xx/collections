@@ -30,8 +30,8 @@ short_description: Set MAAS configs
 
 version_added: "1.0.0"
 
-description: Given a list of MAAS config settings, this module will compare that list to the
-             current settings and update them if needed.
+description: Given a dictionary of MAAS config settings, this module will compare each value to the
+             current setting and update as needed.
 
 options:
     password:
@@ -47,18 +47,13 @@ options:
         required: true
         type: str
     configs:
-        description: A list containing config specifier dictionaries
+        description: A dictionary containing config settings
         required: true
-        type: list
-        suboptions:
-          name:
-              description: The name of the MAAS config setting
-              required: true
-              type: str
+        type: dict
 
 notes:
     - The configs are always defined on the server, even if an empty value
-    - It isn't possible to get a list of all keys, so must look at MAAS server or MAAS API docs for valid values.
+    - It isn't possible to get a list of all keys available, so must look at MAAS server or MAAS API docs for valid values.
 
 requirements:
    - requests
