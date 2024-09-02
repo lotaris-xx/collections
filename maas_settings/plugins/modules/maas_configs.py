@@ -86,140 +86,49 @@ from ansible_collections.rhc.maas_settings.plugins.module_utils.maas_common impo
 )
 
 
-def config_needs_updating(current, wanted, module):
+def lookup_config(lookup, module):
     """
-    Compare two config definitions and see if there are differences
-    in the fields we allow to be changed
-    """
-
-    ret = False
-
-    current_filtered = {k: v for k, v in current.items() if k in CONFIG_MODIFY_KEYS}
-    wanted_filtered = {k: v for k, v in wanted.items() if k in CONFIG_MODIFY_KEYS}
-
-    if sorted(current_filtered) != sorted(wanted_filtered):
-        ret = True
-
-    for key in wanted_filtered.keys():
-        if str(wanted_filtered[key]) != str(current_filtered[key]):
-            ret = True
-
-    return ret
-
-
-def get_maas_configs(session, module):
-    """
-    Grab the current list of configs
+    Given a lookup return the current config if the lookup succeds
     """
     try:
-        filtered_configs = []
-        current_configs = session.get(f"{module.params['site']}/api/2.0/configs/")
-        current_configs.raise_for_status()
 
-        # filter the list down to keys we support
-        for config in current_configs.json():
-            filtered_configs.append(
-                {k: v for k, v in config.items() if k in CONFIG_SUPPORTED_KEYS}
-            )
-        return filtered_configs
+        current_config = session.get(
+            f"{module.params['site']}/api/2.0/maas/op-get_config", params=lookup
+        )
+
+        current_config.raise_for_status()
+
+        return current_config.json()
+
     except exceptions.RequestException as e:
-        module.fail_json(msg="Failed to get current config list: {}".format(str(e)))
+        module.fail_json(
+            msg="Failed to get current config for {}: {}".format(lookup, str(e))
+        )
 
 
-def lookup_config(lookup, current_configs, module):
+def maas_update_config(session, setting, module):
     """
-    Given a lookup return a config if the lookup
-    matches a current config
+    Update a given config
     """
+    res["changed"] = True
 
-    if lookup["name"] in current_configs.keys():
-        return current_configs[lookup["name"]]
+    if not module.check_mode:
+        payload = {
+            "name": setting.key(),
+            "value": setting.value(),
+        }
+        try:
+            r = session.put(
+                f"{module.params['site']}/api/2.0/maas/maas/op-set_config",
+                data=payload,
+            )
+            r.raise_for_status()
+        except exceptions.RequestException as e:
+            module.fail_json(
+                msg=f"config Update Failed: {format(str(e))} with payload {format(payload)} and {format(setting)}"
+            )
 
-    return None
-
-
-def maas_update_configs(session, current_configs, module_configs, module, res):
-    """
-    Given a list of configs to add, we add those that don't exist
-    If they exist, we check if something has changed and if it
-    is a parameter that we can update, we call a function to do
-    that.
-    """
-    configlist_added = []
-    configlist_updated = []
-
-    for config in module_configs:
-        if (matching_config := lookup_config(config, current_configs, module)) is None:
-            configlist_added.append(config)
-            res["changed"] = True
-
-            if not module.check_mode:
-                payload = {
-                    "name": config["name"],
-                    "comment": config["comment"] if "comment" in config.keys() else "",
-                    "definition": (
-                        config["definition"] if "definition" in config.keys() else ""
-                    ),
-                    "kernel_opts": (
-                        config["kernel_opts"] if "kernel_opts" in config.keys() else ""
-                    ),
-                }
-                try:
-                    r = session.post(
-                        f"{module.params['site']}/api/2.0/configs/",
-                        data=payload,
-                    )
-                    r.raise_for_status()
-                except exceptions.RequestException as e:
-                    module.fail_json(
-                        msg=f"config Add Failed: {format(str(e))} with payload {format(payload)} and {format(config)}"
-                    )
-        else:
-            if config_needs_updating(matching_config, config, module):
-                configlist_updated.append(config)
-                res["changed"] = True
-
-                if not module.check_mode:
-                    payload = {
-                        "comment": (
-                            config["comment"] if "comment" in config.keys() else ""
-                        ),
-                        "definition": (
-                            config["definition"]
-                            if "definition" in config.keys()
-                            else ""
-                        ),
-                        "kernel_opts": (
-                            config["kernel_opts"]
-                            if "kernel_opts" in config.keys()
-                            else ""
-                        ),
-                    }
-                    try:
-                        r = session.put(
-                            f"{module.params['site']}/api/2.0/configs/{config['name']}/",
-                            data=payload,
-                        )
-                        r.raise_for_status()
-                    except exceptions.RequestException as e:
-                        module.fail_json(
-                            msg=f"config Update Failed: {format(str(e))} with payload {format(payload)} and {format(config)}"
-                        )
-
-    new_configs_dict = {
-        item["name"]: item for item in get_maas_configs(session, module)
-    }
-
-    res["diff"] = dict(
-        before=safe_dump(current_configs),
-        after=safe_dump(new_configs_dict),
-    )
-
-    if configlist_added:
-        res["message"].append("Added configs: " + str(configlist_added))
-
-    if configlist_updated:
-        res["message"].append("Updated configs: " + str(configlist_updated))
+    res["message"].append("Updated config: " + str(configlist_updated))
 
 
 def run_module():
@@ -252,42 +161,41 @@ def run_module():
         signature_method="PLAINTEXT",
     )
 
-    current_configs_dict = {
-        item["name"]: item for item in get_maas_configs(maas_session, module)
-    }
+    configs = module.params["configs"]
 
-    if module.params["state"] == "present":
-        maas_add_configs(
-            maas_session,
-            current_configs_dict,
-            module.params["configs"],
-            module,
-            result,
-        )
+    current_configs = {}
+    # For each config setting
+    for setting in configs:
+        matching_setting = lookup_config(setting, module)
+        current_configs.update(matching_setting)
 
-    elif module.params["state"] == "absent":
-        maas_delete_configs(
-            maas_session,
-            current_configs_dict,
-            module.params["configs"],
-            module,
-            result,
-        )
-
-    elif module.params["state"] == "exact":
-        if module.params["configs"]:
-            maas_exact_configs(
+        # If the setting needs to be updated
+        if configs[setting] != matching_setting.value():
+            # Update the setting
+            maas_update_config(
                 maas_session,
-                current_configs_dict,
-                module.params["configs"],
+                setting,
                 module,
-                result,
             )
-        configs = module.params["configs"]
-    for config in configs:
-        if any(c in config["name"] for c in string.whitespace):
+
+    result["diff"] = dict(
+        before=safe_dump(current_configs),
+        after=safe_dump(configs),
+    )
+
+
+def validate_module_parameters(module):
+    """
+    Perform simple validations on module parameters
+    """
+
+    import string
+
+    configs = module.params["configs"]
+    for setting in configs:
+        if any(c in configs[setting] for c in string.whitespace):
             module.fail_json(
-                msg=f"config names can not contain whitespace, found {config}"
+                msg=f"config setting names can not contain whitespace, found {config}"
             )
 
 
