@@ -2,6 +2,7 @@
 
 from __future__ import absolute_import, division, print_function
 from ansible.module_utils.basic import missing_required_lib
+import ansible.module_utils.maas_file
 
 from collections import Counter
 from yaml import safe_dump
@@ -58,8 +59,8 @@ options:
         required: true
         type: str
     scripts_dir:
-        description: Directory where node scripts are located
-        required: true
+        description: Destination directory for node scripts
+        required: false
         type: str
     user_scripts:
         description: A list containing node script specifier dictionaries
@@ -71,8 +72,8 @@ options:
               required: true
               type: str
           file:
-              description: The location of the node script
-              required: true
+              description: The filename of the node script (used to compare contents with existing script)
+              required: false
               type: str
 
 notes:
@@ -92,8 +93,8 @@ EXAMPLES = r"""
 # Add 2 node_scripts if they don't exist
 -  username: user
    password: password
-   script_dir: /root/user_scripts
-   node_scripts:
+   script_dir: /root/node_scripts
+   user_scripts:
      - name: "script1"
        file: "script1.sh"
      - name: "check health"
@@ -103,7 +104,7 @@ EXAMPLES = r"""
 -  username: user
    password: password
    state: absent
-   node_scripts:
+   user_scripts:
      - name: script1
      - name: check health
 
@@ -111,12 +112,12 @@ EXAMPLES = r"""
 -  username: user
    password: password
    state: exact
-   node_scripts:
+   script_dir: /root/node_scripts
+   user_scripts:
      - name: validate app perms
        file: validate_app_perms.sh
      - name: script2.sh
        file: script2.sh
-
 """
 
 RETURN = r"""
