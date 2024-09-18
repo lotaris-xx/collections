@@ -3,16 +3,13 @@
 
 from __future__ import annotations
 
-import os
-import re
-import shlex
-
 from ansible.errors import (
     AnsibleError,
     AnsibleAction,
     _AnsibleActionDone,
     AnsibleActionFail,
     AnsibleActionSkip,
+    AnsibleFileNotFound,
 )
 from ansible.module_utils.common.text.converters import to_bytes, to_native, to_text
 from ansible.plugins.action import ActionBase
@@ -27,26 +24,43 @@ class ActionModule(ActionBase):
 
         validation_result, new_module_args = self.validate_argument_spec(
             argument_spec={
+                "password": {"type": "str", "required": True},
                 "script_dir": {"type": "str", "required": True},
-                "user_scripts": {"type": "dict", "required": True},
+                "site": {"type": "str", "required": True},
+                "user_scripts": {"type": "list", "required": True},
+                "username": {"type": "str", "required": True},
             },
         )
 
         result = super(ActionModule, self).run(tmp, task_vars)
         del tmp  # tmp no longer has any effect
         try:
+            for user_script in new_module_args["user_scripts"]:
+                try:
+                    fp = self._loader.get_real_file(
+                        self._find_needle("files", user_script["file"]),
+                        decrypt=self._task.args.get("decrypt", True),
+                    )
 
-            try:
-                source = self._loader.get_real_file(
-                    self._find_needle("files", source),
-                    decrypt=self._task.args.get("decrypt", True),
-                )
-            except AnsibleError as e:
-                raise AnsibleActionFail(to_native(e))
+                    user_script["contents"] = to_native(open(fp, "rb").read())
+
+                except AnsibleFileNotFound as e:
+
+                    result["failed"] = True
+                    result["msg"] = (
+                        f"could not find user_script {user_script['file']} on controller, run with -vvvvv to see paths searched."
+                    )
+                    return result
+
+                except AnsibleError as e:
+                    raise AnsibleActionFail(to_native(e))
 
             result.update(
-                self._low_level_execute_command(
-                    cmd=script_cmd, in_data=exec_data, sudoable=True, chdir=chdir
+                self._execute_module(
+                    "rhc.maas_settings.maas_node_scripts",
+                    module_args=new_module_args,
+                    task_vars=task_vars,
+                    wrap_async=self._task.async_val,
                 )
             )
 
