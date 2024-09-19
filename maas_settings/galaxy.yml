@@ -3,7 +3,7 @@
 
 namespace: rhc
 name: maas_settings
-version: 0.1.3
+version: 0.1.4
 readme: README.md
 authors:
   - Allen Smith (github.com/lotaris-xx)
