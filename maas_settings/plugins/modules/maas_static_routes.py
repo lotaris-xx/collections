@@ -3,12 +3,11 @@
 from __future__ import absolute_import, division, print_function
 from ansible.module_utils.basic import missing_required_lib
 
-from collections import Counter
 from yaml import safe_dump
 from ipaddress import ip_address, ip_network
 
 try:
-    from requests import post, exceptions
+    from requests import exceptions
 
     HAS_REQUESTS = True
 except:
@@ -379,9 +378,7 @@ def maas_exact_static_routes(
 
     for sroute in module_static_routes:
         if (
-            matching_route := lookup_static_route(
-                sroute["destination"], current_static_routes, module
-            )
+            lookup_static_route(sroute["destination"], current_static_routes, module)
         ) is None:
             wanted_add_update.append(sroute)
 
@@ -493,7 +490,7 @@ def validate_module_parameters(module):
             module.fail_json(msg="Source network is invalid: {}".format(str(e)))
 
         try:
-            dest_network = ip_network(sroute["destination"])
+            ip_network(sroute["destination"])
 
         except ValueError as e:
             module.fail_json(msg="Destination network is invalid: {}".format(str(e)))

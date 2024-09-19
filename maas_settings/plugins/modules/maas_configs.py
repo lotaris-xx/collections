@@ -3,11 +3,10 @@
 from __future__ import absolute_import, division, print_function
 from ansible.module_utils.basic import missing_required_lib
 
-from collections import Counter
 from yaml import safe_dump
 
 try:
-    from requests import post, exceptions
+    from requests import exceptions
 
     HAS_REQUESTS = True
 except:

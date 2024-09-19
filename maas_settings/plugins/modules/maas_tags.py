@@ -3,11 +3,10 @@
 from __future__ import absolute_import, division, print_function
 from ansible.module_utils.basic import missing_required_lib
 
-from collections import Counter
 from yaml import safe_dump
 
 try:
-    from requests import post, exceptions
+    from requests import exceptions
 
     HAS_REQUESTS = True
 except:
@@ -286,7 +285,7 @@ def maas_delete_tags(session, current_tags, module_tags, module, res):
     taglist = []
 
     for tag in module_tags:
-        if (matching_tag := lookup_tag(tag, current_tags, module)) is not None:
+        if lookup_tag(tag, current_tags, module) is not None:
             taglist.append(tag["name"])
             res["changed"] = True
 

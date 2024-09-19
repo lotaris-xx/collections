@@ -7,7 +7,7 @@ from collections import Counter
 from yaml import safe_dump
 
 try:
-    from requests import post, exceptions
+    from requests import exceptions
 
     HAS_REQUESTS = True
 except:
@@ -296,8 +296,9 @@ def maas_exact_vlans(session, current_vlans, module_vlans, module, res):
     to make reality match the list
     """
     wanted = []
+    wanted_add = []
     wanted_delete = []
-    wanted_add_update = []
+    wanted_update = []
 
     for vlan in module_vlans:
         vlan["vid"] = int(vlan["vid"]) if "vid" in vlan.keys() else int(vlan["name"])

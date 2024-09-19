@@ -6,12 +6,10 @@ from __future__ import annotations
 from ansible.errors import (
     AnsibleError,
     AnsibleAction,
-    _AnsibleActionDone,
     AnsibleActionFail,
-    AnsibleActionSkip,
     AnsibleFileNotFound,
 )
-from ansible.module_utils.common.text.converters import to_bytes, to_native, to_text
+from ansible.module_utils.common.text.converters import to_native
 from ansible.plugins.action import ActionBase
 
 
@@ -44,7 +42,7 @@ class ActionModule(ActionBase):
 
                     user_script["contents"] = to_native(open(fp, "rb").read())
 
-                except AnsibleFileNotFound as e:
+                except AnsibleFileNotFound:
 
                     result["failed"] = True
                     result["msg"] = (

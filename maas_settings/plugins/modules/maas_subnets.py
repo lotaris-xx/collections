@@ -3,12 +3,11 @@
 from __future__ import absolute_import, division, print_function
 from ansible.module_utils.basic import missing_required_lib
 
-from collections import Counter
 from yaml import safe_dump
 from ipaddress import ip_address, ip_network
 
 try:
-    from requests import post, exceptions
+    from requests import exceptions
 
     HAS_REQUESTS = True
 except:
@@ -505,7 +504,7 @@ def validate_module_parameters(module):
                     subnet["dns_servers"] = new_list
 
             for dns_server in subnet["dns_servers"]:
-                dns_address = ip_address(dns_server)
+                ip_address(dns_server)
 
         except ValueError as e:
             module.fail_json(

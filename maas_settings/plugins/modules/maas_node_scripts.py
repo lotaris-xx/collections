@@ -7,7 +7,7 @@ from collections import Counter
 from yaml import safe_dump
 
 try:
-    from requests import post, exceptions
+    from requests import exceptions
 
     HAS_REQUESTS = True
 except:
@@ -319,8 +319,9 @@ def maas_exact_node_scripts(
     to make reality match the list
     """
     wanted = []
+    wanted_add = []
     wanted_delete = []
-    wanted_add_update = []
+    wanted_update = []
 
     for node_script in module_node_scripts:
         node_script["vid"] = (
