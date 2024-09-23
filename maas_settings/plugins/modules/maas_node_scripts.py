@@ -3,7 +3,6 @@
 from __future__ import absolute_import, division, print_function
 from ansible.module_utils.basic import missing_required_lib
 
-from collections import Counter
 from yaml import safe_dump
 
 try:
@@ -20,8 +19,8 @@ try:
 except:
     HAS_REQUESTS_OAUTHLIB = False
 
-NODE_SCRIPT_SUPPORTED_KEYS = ["mtu", "name", "vid"]
-NODE_SCRIPT_MODIFY_KEYS = ["mtu", "name"]
+NODE_SCRIPT_SUPPORTED_KEYS = ["name"]
+NODE_SCRIPT_MODIFY_KEYS = []
 
 __metaclass__ = type
 
@@ -423,37 +422,7 @@ def validate_module_parameters(module):
     """
     Perform simple validations on module parameters
     """
-    node_scripts = module.params["node_scripts"]
-
-    # Detect duplice vids
-    vid_list = [
-        node_script["vid"] if "vid" in node_script.keys() else node_script["name"]
-        for node_script in node_scripts
-    ]
-    if len(vid_list) != len(set(vid_list)):
-        node_script_dupes = [
-            item for item, count in Counter(vid_list).items() if count > 1
-        ]
-        module.fail_json(
-            msg=f"Duplicate vids handed to us in list of node_scripts. Dupes are {node_script_dupes} from: {node_scripts}"
-        )
-
-    # Detect invalid vids
-    invalid_vid_list = [
-        vid for vid in vid_list if not type(vid) is int or (vid < 1 or vid > 4094)
-    ]
-    if len(invalid_vid_list):
-        module.fail_json(
-            msg=f"Invalid VIDs detected {invalid_vid_list} from: {node_scripts}"
-        )
-
-    # Detect keys we don't yet handle
-    for node_script in node_scripts:
-        for key in node_script.keys():
-            if key not in NODE_SCRIPT_SUPPORTED_KEYS:
-                module.fail_json(
-                    msg=f"{key} is not a supported key. Possible values {NODE_SCRIPT_SUPPORTED_KEYS}"
-                )
+    # node_scripts = module.params["node_scripts"]
 
 
 def main():
