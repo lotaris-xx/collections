@@ -25,6 +25,7 @@ class ActionModule(ActionBase):
                 "password": {"type": "str", "required": True},
                 "script_dir": {"type": "str", "required": True},
                 "site": {"type": "str", "required": True},
+                "state": {"type": "str", "required": False, "default": "present"},
                 "user_scripts": {"type": "list", "required": True},
                 "username": {"type": "str", "required": True},
             },

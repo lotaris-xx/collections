@@ -2,6 +2,7 @@
 
 from __future__ import absolute_import, division, print_function
 from ansible.module_utils.basic import missing_required_lib
+from ansible.module_utils.common.text.converters import to_text
 
 from yaml import safe_dump
 
@@ -132,6 +133,17 @@ from ansible_collections.rhc.maas_settings.plugins.module_utils.maas_common impo
 )
 
 
+def lookup_node_script(lookup, current_scripts, module):
+    """
+    Given a lookup return a script if the lookup
+    matches a current script
+    """
+    if lookup["name"] in current_scripts.keys():
+        return current_scripts[lookup["name"]]
+
+    return None
+
+
 def node_script_needs_updating(current, wanted):
     """
     Compare two node_script definitions and see if there are differences
@@ -162,17 +174,17 @@ def get_maas_node_scripts(session, module):
         current_node_scripts = session.get(f"{module.params['site']}/api/2.0/scripts/")
         current_node_scripts.raise_for_status()
 
-        module.fail_json(msg=f"{current_node_scripts.json()}")
-
         # filter the list down to keys we support
         for node_script in current_node_scripts.json():
-            filtered_node_scripts.append(
-                {
-                    k: v
-                    for k, v in node_script.items()
-                    if k in NODE_SCRIPT_SUPPORTED_KEYS
-                }
-            )
+            # module.fail_json(node_script)
+            if not node_script["default"]:
+                filtered_node_scripts.append(
+                    {
+                        k: v
+                        for k, v in node_script.items()
+                        if k in NODE_SCRIPT_SUPPORTED_KEYS
+                    }
+                )
         return filtered_node_scripts
     except exceptions.RequestException as e:
         module.fail_json(
@@ -185,73 +197,55 @@ def maas_add_node_scripts(
 ):
     """
     Given a list of node_scripts to add, we add those that don't exist
-    If they exist, we check if something has changed and if it
-    is a parameter that we can update, we call a function to do
-    that.
+    If they exist, we check if the script has changed and if it has we
+    upload the new script.
     """
-    vlist_added = []
-    vlist_updated = []
+    script_list_added = []
+    script_list_updated = []
 
-    for node_script in module_node_scripts:
-        wanted = {}
-        wanted["name"] = node_script["name"]
-        wanted["fabric_id"] = 0
-        wanted["mtu"] = int(node_script["mtu"]) if "mtu" in node_script.keys() else 1500
-        wanted["vid"] = (
-            int(node_script["vid"])
-            if "vid" in node_script.keys()
-            else int(node_script["name"])
-        )
-
-        if wanted["vid"] not in current_node_scripts.keys():
-            if wanted["name"] in current_node_scripts.keys():
-                module.fail_json(
-                    msg=f"Can't change vid for node_script {wanted['name']} from {current_node_scripts[wanted['name']]['vid']} to {wanted['vid']}"
-                )
-
-            vlist_added.append(wanted["vid"])
+    for script in module_node_scripts:
+        if (
+            matching_script := lookup_node_script(script, current_node_scripts, module)
+        ) is None:
+            script_list_added.append(script["name"])
             res["changed"] = True
 
             if not module.check_mode:
-                payload = {
-                    "mtu": wanted["mtu"],
-                    "name": wanted["name"],
-                    "vid": wanted["vid"],
-                    "fabric_id": wanted["fabric_id"],
-                }
                 try:
                     r = session.post(
-                        f"{module.params['site']}/api/2.0/fabrics/{wanted['fabric_id']}/node_scripts/",
-                        data=payload,
+                        f"{module.params['site']}/api/2.0/scripts/",
+                        files={script["name"]: (script["name"], script["contents"])},
                     )
                     r.raise_for_status()
                 except exceptions.RequestException as e:
                     module.fail_json(
-                        msg=f"node_script Add Failed: {format(str(e))} with payload {format(payload)} and {format(wanted)}"
+                        msg=f"Node Script Add Failed: {format(str(e))} with {r.text} and {format(script)}"
                     )
         else:
-            if node_script_needs_updating(current_node_scripts[wanted["vid"]], wanted):
-                vlist_updated.append(wanted["vid"])
+            if node_script_needs_updating(matching_script, script, module):
+                script_list_updated.append(script["name"])
                 res["changed"] = True
+
+                script["id"] = matching_script["id"]
 
                 if not module.check_mode:
                     payload = {
-                        "mtu": wanted["mtu"],
-                        "name": wanted["name"],
+                        "name": script["name"],
+                        "script": script["contents"],
                     }
                     try:
                         r = session.put(
-                            f"{module.params['site']}/api/2.0/fabrics/{wanted['fabric_id']}/node_scripts/{wanted['vid']}/",
+                            f"{module.params['site']}/api/2.0/scripts/{script['name']}/",
                             data=payload,
                         )
                         r.raise_for_status()
                     except exceptions.RequestException as e:
                         module.fail_json(
-                            msg=f"node_script Update Failed: {format(str(e))} with payload {format(payload)} and {format(wanted)}"
+                            msg=f"script Update Failed: {format(str(e))} with payload {format(payload)} and {format(script)}"
                         )
 
     new_node_scripts_dict = {
-        item["vid"]: item for item in get_maas_node_scripts(session, module)
+        item["name"]: item for item in get_maas_node_scripts(session, module)
     }
 
     res["diff"] = dict(
@@ -259,11 +253,50 @@ def maas_add_node_scripts(
         after=safe_dump(new_node_scripts_dict),
     )
 
-    if vlist_added:
-        res["message"].append("Added node_scripts: " + str(vlist_added))
+    if script_list_added:
+        res["message"].append("Added node_scripts: " + str(script_list_added))
 
-    if vlist_updated:
-        res["message"].append("Updated node_scripts: " + str(vlist_updated))
+    if script_list_updated:
+        res["message"].append("Updated node_scripts: " + str(script_list_updated))
+
+
+def maas_delete_all_node_scripts(session, current_node_scripts, module, res):
+    """
+    Delete all node_scripts
+    """
+    scriptlist = []
+
+    for item in current_node_scripts:
+        node_script = current_node_scripts[item]
+        scriptlist.append(item)
+        res["changed"] = True
+
+        if not module.check_mode:
+            payload = {
+                "name": node_script["name"],
+            }
+            try:
+                r = session.delete(
+                    f"{module.params['site']}/api/2.0/scripts/{node_script['name']}",
+                    data=payload,
+                )
+                r.raise_for_status()
+            except exceptions.RequestException as e:
+                module.fail_json(
+                    msg=f"node_script Remove Failed: {format(str(e))}, {r.text} with {format(current_node_scripts)}"
+                )
+
+            new_node_scripts_dict = {
+                item["name"]: item for item in get_maas_node_scripts(session, module)
+            }
+
+            res["diff"] = dict(
+                before=safe_dump(current_node_scripts),
+                after=safe_dump(new_node_scripts_dict),
+            )
+
+    if scriptlist:
+        res["message"].append("Removed node_scripts: " + str(scriptlist))
 
 
 def maas_delete_node_scripts(
@@ -289,7 +322,7 @@ def maas_delete_node_scripts(
             if not module.check_mode:
                 try:
                     r = session.delete(
-                        f"{module.params['site']}/api/2.0/fabrics/{fabric_id}/node_scripts/{vid}/",
+                        f"{module.params['site']}/api/2.0/scripts/{script['name']}",
                     )
                     r.raise_for_status()
                 except exceptions.RequestException as e:
@@ -385,14 +418,16 @@ def run_module():
     )
 
     current_node_scripts_dict = {
-        item["vid"]: item for item in get_maas_node_scripts(maas_session, module)
+        item["name"]: item for item in get_maas_node_scripts(maas_session, module)
     }
+
+    # module.fail_json(current_node_scripts_dict)
 
     if module.params["state"] == "present":
         maas_add_node_scripts(
             maas_session,
             current_node_scripts_dict,
-            module.params["node_scripts"],
+            module.params["user_scripts"],
             module,
             result,
         )
@@ -401,19 +436,27 @@ def run_module():
         maas_delete_node_scripts(
             maas_session,
             current_node_scripts_dict,
-            module.params["node_scripts"],
+            module.params["user_scripts"],
             module,
             result,
         )
 
     elif module.params["state"] == "exact":
-        maas_exact_node_scripts(
-            maas_session,
-            current_node_scripts_dict,
-            module.params["node_scripts"],
-            module,
-            result,
-        )
+        if module.params["user_scripts"]:
+            maas_exact_node_scripts(
+                maas_session,
+                current_node_scripts_dict,
+                module.params["user_scripts"],
+                module,
+                result,
+            )
+        else:
+            maas_delete_all_node_scripts(
+                maas_session,
+                current_node_scripts_dict,
+                module,
+                result,
+            )
 
     module.exit_json(**result)
 
