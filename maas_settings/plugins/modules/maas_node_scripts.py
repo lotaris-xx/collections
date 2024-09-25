@@ -144,12 +144,29 @@ def lookup_node_script(lookup, current_scripts, module):
     return None
 
 
-def node_script_needs_updating(current, wanted):
+def node_script_needs_updating(current, wanted, module, session):
     """
     Compare two node_script definitions and see if there are differences
     in the fields we allow to be changed
     """
     ret = False
+    # Special handling for the contents of the script
+    try:
+        payload = {"op": "download", "name": wanted["name"]}
+        current_content = session.get(
+            f"{module.params['site']}/api/2.0/scripts/{wanted['name']}", params=payload
+        )
+        current_content.raise_for_status()
+
+    except exceptions.RequestException as e:
+        module.fail_json(
+            msg="Failed to get current node_script list: {}".format(str(e))
+        )
+
+    if wanted["contents"] != current_content.text:
+        ret = True
+
+    # Handle any other keys we may want to support in the future
     current_filtered = {
         k: v for k, v in current.items() if k in NODE_SCRIPT_MODIFY_KEYS
     }
@@ -167,7 +184,6 @@ def node_script_needs_updating(current, wanted):
 def get_maas_node_scripts(session, module):
     """
     Grab the current list of node_scripts
-    NOTE: We only support fabric 0 at this time so it is hard coded.
     """
     try:
         filtered_node_scripts = []
@@ -176,7 +192,7 @@ def get_maas_node_scripts(session, module):
 
         # filter the list down to keys we support
         for node_script in current_node_scripts.json():
-            # module.fail_json(node_script)
+            # Ignore the scripts shipped with MAAS
             if not node_script["default"]:
                 filtered_node_scripts.append(
                     {
@@ -222,42 +238,41 @@ def maas_add_node_scripts(
                         msg=f"Node Script Add Failed: {format(str(e))} with {r.text} and {format(script)}"
                     )
         else:
-            if node_script_needs_updating(matching_script, script, module):
+            if node_script_needs_updating(matching_script, script, module, session):
                 script_list_updated.append(script["name"])
                 res["changed"] = True
 
-                script["id"] = matching_script["id"]
-
                 if not module.check_mode:
-                    payload = {
-                        "name": script["name"],
-                        "script": script["contents"],
-                    }
                     try:
                         r = session.put(
-                            f"{module.params['site']}/api/2.0/scripts/{script['name']}/",
-                            data=payload,
+                            f"{module.params['site']}/api/2.0/scripts/{script['name']}",
+                            files={
+                                script["name"]: (script["name"], script["contents"])
+                            },
                         )
                         r.raise_for_status()
                     except exceptions.RequestException as e:
                         module.fail_json(
-                            msg=f"script Update Failed: {format(str(e))} with payload {format(payload)} and {format(script)}"
+                            msg=f"script Update Failed: {format(str(e))} with {r.text} and {format(script)}"
                         )
 
     new_node_scripts_dict = {
         item["name"]: item for item in get_maas_node_scripts(session, module)
     }
 
-    res["diff"] = dict(
-        before=safe_dump(current_node_scripts),
-        after=safe_dump(new_node_scripts_dict),
-    )
-
     if script_list_added:
         res["message"].append("Added node_scripts: " + str(script_list_added))
 
     if script_list_updated:
         res["message"].append("Updated node_scripts: " + str(script_list_updated))
+        for script_name in script_list_updated:
+            del current_node_scripts[script_name]
+            new_node_scripts_dict[script_name]["name"] += " (modified)"
+
+    res["diff"] = dict(
+        before=safe_dump(current_node_scripts),
+        after=safe_dump(new_node_scripts_dict),
+    )
 
 
 def maas_delete_all_node_scripts(session, current_node_scripts, module, res):
