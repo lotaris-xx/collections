@@ -2,7 +2,6 @@
 
 from __future__ import absolute_import, division, print_function
 from ansible.module_utils.basic import missing_required_lib
-from ansible.module_utils.common.text.converters import to_text
 
 from yaml import safe_dump
 
@@ -320,33 +319,27 @@ def maas_delete_node_scripts(
     """
     Given a list of node_scripts to remove, we delete those that exist"
     """
-    vlist = []
+    script_list = []
 
     for node_script in module_node_scripts:
-        fabric_id = 0
-        vid = (
-            int(node_script["vid"])
-            if "vid" in node_script.keys()
-            else int(node_script["name"])
-        )
-
-        if vid in current_node_scripts.keys():
-            vlist.append(vid)
+        if node_script["name"] in current_node_scripts.keys():
+            script_list.append(node_script)
             res["changed"] = True
 
             if not module.check_mode:
                 try:
                     r = session.delete(
-                        f"{module.params['site']}/api/2.0/scripts/{script['name']}",
+                        f"{module.params['site']}/api/2.0/scripts/{node_script['name']}",
                     )
                     r.raise_for_status()
                 except exceptions.RequestException as e:
                     module.fail_json(
-                        msg=f"node_script Remove Failed: {format(str(e))} with {format(current_node_scripts)}"
+                        msg=f"node_script Remove Failed: {format(str(e))}, {r.text} with {format(current_node_scripts)}"
                     )
 
                 new_node_scripts_dict = {
-                    item["vid"]: item for item in get_maas_node_scripts(session, module)
+                    item["name"]: item
+                    for item in get_maas_node_scripts(session, module)
                 }
 
                 res["diff"] = dict(
@@ -354,8 +347,8 @@ def maas_delete_node_scripts(
                     after=safe_dump(new_node_scripts_dict),
                 )
 
-    if vlist:
-        res["message"].append("Removed node_scripts: " + str(vlist))
+    if script_list:
+        res["message"].append("Removed node_scripts: " + str(script_list))
 
 
 def maas_exact_node_scripts(
@@ -371,19 +364,24 @@ def maas_exact_node_scripts(
     wanted_update = []
 
     for node_script in module_node_scripts:
-        node_script["vid"] = (
-            int(node_script["vid"])
-            if "vid" in node_script.keys()
-            else int(node_script["name"])
-        )
-        wanted.append(node_script["vid"])
+        wanted.append(node_script["name"])
 
-    module_node_scripts_dict = {k["vid"]: k for k in module_node_scripts}
-    delete_list = [vid for vid in current_node_scripts.keys() if vid not in wanted]
-    add_list = [vid for vid in wanted if vid not in current_node_scripts.keys()]
-    update_list = [vid for vid in wanted if vid in current_node_scripts.keys()]
-
-    delete_list.remove(0)
+    module_node_scripts_dict = {k["name"]: k for k in module_node_scripts}
+    delete_list = [
+        script_name
+        for script_name in current_node_scripts.keys()
+        if script_name not in wanted
+    ]
+    add_list = [
+        script_name
+        for script_name in wanted
+        if script_name not in current_node_scripts.keys()
+    ]
+    update_list = [
+        script_name
+        for script_name in wanted
+        if script_name in current_node_scripts.keys()
+    ]
 
     if delete_list:
         wanted_delete = [{"name": k} for k in delete_list]
@@ -420,8 +418,6 @@ def run_module():
     if not HAS_REQUESTS_OAUTHLIB:
         module.fail_json(msg=missing_required_lib("requests_oauthlib"))
 
-    # validate_module_parameters(module)
-
     response = grab_maas_apikey(module)
     api_cred = maas_api_cred(response.json())
 
@@ -432,11 +428,11 @@ def run_module():
         signature_method="PLAINTEXT",
     )
 
+    validate_module_parameters(module)
+
     current_node_scripts_dict = {
         item["name"]: item for item in get_maas_node_scripts(maas_session, module)
     }
-
-    # module.fail_json(current_node_scripts_dict)
 
     if module.params["state"] == "present":
         maas_add_node_scripts(
@@ -480,7 +476,16 @@ def validate_module_parameters(module):
     """
     Perform simple validations on module parameters
     """
-    # node_scripts = module.params["node_scripts"]
+    import string
+
+    if "user_scripts" in module.params:
+        node_scripts = module.params["user_scripts"]
+
+        for script in node_scripts:
+            if any(c in script["name"] for c in string.whitespace):
+                module.fail_json(
+                    msg=f"Script names can not contain whitespace, found '{script['name']}'"
+                )
 
 
 def main():
