@@ -1,10 +1,9 @@
 ---
 action_groups:
   maas_settings_group:
-    - vlan
-    - maas_configs.py
-    - maas_node_scripts.py
-    - maas_static_routes.py
-    - maas_subnets.py
-    - maas_tags.py
-    - maas_vlans.py
+    - maas_configs
+    - maas_node_scripts
+    - maas_static_routes
+    - maas_subnets
+    - maas_tags
+    - maas_vlans
