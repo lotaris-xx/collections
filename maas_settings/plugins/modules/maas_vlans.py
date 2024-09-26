@@ -383,8 +383,9 @@ def validate_module_parameters(module):
     """
     vlans = module.params["vlans"]
 
-    # Detect duplice vids
     vid_list = [vlan["vid"] if "vid" in vlan.keys() else vlan["name"] for vlan in vlans]
+
+    # Detect duplice vids
     if len(vid_list) != len(set(vid_list)):
         vlan_dupes = [item for item, count in Counter(vid_list).items() if count > 1]
         module.fail_json(
@@ -392,10 +393,8 @@ def validate_module_parameters(module):
         )
 
     # Detect invalid vids
-    invalid_vid_list = [
-        vid for vid in vid_list if not type(vid) is int or (vid < 1 or vid > 4094)
-    ]
-    if len(invalid_vid_list):
+    invalid_vid_list = [vid for vid in vid_list if (int(vid) < 1 or int(vid) > 4094)]
+    if invalid_vid_list:
         module.fail_json(msg=f"Invalid VIDs detected {invalid_vid_list} from: {vlans}")
 
     # Detect keys we don't yet handle
