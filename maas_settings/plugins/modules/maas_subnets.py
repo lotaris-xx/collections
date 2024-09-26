@@ -160,17 +160,21 @@ def subnet_needs_updating(current, wanted, module):
     ):
         ret = True
 
-    if wanted_filtered["gateway_ip"] != current_filtered["gateway_ip"]:
-        ret = True
+    if wanted_filtered["gateway_ip"] or current_filtered["gateway_ip"]:
+        if wanted_filtered["gateway_ip"] != current_filtered["gateway_ip"]:
+            ret = True
 
-    if wanted_filtered["name"] != current_filtered["name"]:
-        ret = True
+    if wanted_filtered["name"] or current_filtered["name"]:
+        if wanted_filtered["name"] != current_filtered["name"]:
+            ret = True
 
-    if str(wanted_filtered["vid"]) != str(current_filtered["vlan"]["vid"]):
-        ret = True
+    if "vid" in wanted_filtered:
+        if str(wanted_filtered["vid"]) != str(current_filtered["vlan"]["vid"]):
+            ret = True
 
-    if str(wanted_filtered["vlan"]["vid"]) != str(current_filtered["vlan"]["vid"]):
-        ret = True
+    if "vlan" in wanted_filtered and "vid" in wanted_filtered["vlan"]:
+        if str(wanted_filtered["vlan"]["vid"]) != str(current_filtered["vlan"]["vid"]):
+            ret = True
 
     return ret
 
@@ -251,7 +255,7 @@ def maas_add_subnets(session, current_subnets, module_subnets, module, res):
                         "description": subnet["description"],
                         "dns_servers": ",".join(subnet["dns_servers"]),
                         "gateway_ip": subnet["gateway_ip"],
-                        "name": subnet["name"],
+                        "name": subnet["name"] if subnet["name"] else "",
                         "vid": subnet["vid"],
                     }
                     try:
@@ -486,6 +490,8 @@ def validate_module_parameters(module):
                         subnet["vid"] = 0
                 else:
                     subnet[key] = ""
+                if key == "name":
+                    subnet[key] = subnet["cidr"]
 
         # Validate IP related info
         try:
@@ -526,7 +532,11 @@ def validate_module_parameters(module):
             module.fail_json(msg="Gateway IP address is invalid: {}".format(str(e)))
 
         # Detect invalid vids
-        if not type(subnet["vid"]) is int or subnet["vid"] < 0 or subnet["vid"] > 4094:
+        if (
+            not str(subnet["vid"]).isdigit()
+            or int(subnet["vid"]) < 0
+            or int(subnet["vid"]) > 4094
+        ):
             invalid_vid_list.append(subnet["vid"])
 
     if invalid_vid_list:

@@ -205,6 +205,7 @@ def maas_add_static_routes(
     matching_route = {}
 
     for static_route in module_static_routes:
+        module.fail_json(static_route)
         if "metric" not in static_route.keys():
             static_route["metric"] = 0
 
@@ -361,6 +362,7 @@ def maas_exact_static_routes(
     Given a list of static_routes, remove and add/update as needed
     to make reality match the list
     """
+    dest = {}
     wanted = []
     wanted_delete = []
     wanted_add_update = []
@@ -369,8 +371,10 @@ def maas_exact_static_routes(
 
     wanted = module_static_routes_dict.keys()
 
-    for sroute in current_static_routes:
-        dest = sroute["destination"]
+    # module.fail_json(current_static_routes)
+    for sroute in current_static_routes.keys():
+        # module.fail_json(current_static_routes[sroute]["destination"])
+        dest = current_static_routes[sroute]["destination"]
         if (dest["name"] not in wanted) and (dest["cidr"] not in wanted):
             wanted_delete.append(sroute)
         else:

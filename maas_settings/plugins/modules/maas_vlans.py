@@ -393,7 +393,11 @@ def validate_module_parameters(module):
         )
 
     # Detect invalid vids
-    invalid_vid_list = [vid for vid in vid_list if (int(vid) < 1 or int(vid) > 4094)]
+    invalid_vid_list = [
+        vid
+        for vid in vid_list
+        if not str(vid).isdigit() or (int(vid) < 1 or int(vid) > 4094)
+    ]
     if invalid_vid_list:
         module.fail_json(msg=f"Invalid VIDs detected {invalid_vid_list} from: {vlans}")
 
