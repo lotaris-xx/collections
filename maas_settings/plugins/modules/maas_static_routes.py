@@ -180,19 +180,20 @@ def lookup_static_route(lookup, current_sroutes, module):
     Given a lookup return a static route if the lookup
     matches either the name or cidr property of a current route
     """
+    ret = None
 
-    for item in current_sroutes:
-        if lookup in [
+    for item in current_sroutes.keys():
+        if lookup["destination"] in [
             current_sroutes[item]["destination"]["name"],
             current_sroutes[item]["destination"]["cidr"],
         ]:
-            return current_sroutes[item]
+            ret = current_sroutes[item]
 
-    return None
+    return ret
 
 
 def maas_add_static_routes(
-    session, current_static_routes, module_static_routes, module, res
+    session, current_static_routes, wanted_static_routes, module, res
 ):
     """
     Given a list of static_routes to add, we add those that don't exist
@@ -202,19 +203,16 @@ def maas_add_static_routes(
     """
     sroutelist_added = []
     sroutelist_updated = []
-    matching_route = {}
 
-    for static_route in module_static_routes:
-        module.fail_json(static_route)
+    for static_route in wanted_static_routes:
         if "metric" not in static_route.keys():
             static_route["metric"] = 0
 
         if (
             matching_route := lookup_static_route(
-                static_route["destination"], current_static_routes, module
+                static_route, current_static_routes, module
             )
         ) is None:
-
             sroutelist_added.append(static_route["destination"])
             res["changed"] = True
 
@@ -233,7 +231,7 @@ def maas_add_static_routes(
                     r.raise_for_status()
                 except exceptions.RequestException as e:
                     module.fail_json(
-                        msg=f"static_route Add Failed: {format(str(e))} with payload {format(payload)} and {format(static_route)}"
+                        msg=f"static_route Add Failed: {format(str(e))} with {r.text} and {format(static_route)}"
                     )
         else:
             if static_route_needs_updating(matching_route, static_route, module):
@@ -356,7 +354,7 @@ def maas_delete_static_routes(
 
 
 def maas_exact_static_routes(
-    session, current_static_routes, module_static_routes, module, res
+    session, current_static_routes, wanted_static_routes, module, res
 ):
     """
     Given a list of static_routes, remove and add/update as needed
@@ -367,23 +365,20 @@ def maas_exact_static_routes(
     wanted_delete = []
     wanted_add_update = []
 
-    module_static_routes_dict = {k["destination"]: k for k in module_static_routes}
+    module_static_routes_dict = {k["destination"]: k for k in wanted_static_routes}
 
     wanted = module_static_routes_dict.keys()
 
-    # module.fail_json(current_static_routes)
     for sroute in current_static_routes.keys():
-        # module.fail_json(current_static_routes[sroute]["destination"])
         dest = current_static_routes[sroute]["destination"]
         if (dest["name"] not in wanted) and (dest["cidr"] not in wanted):
             wanted_delete.append(sroute)
         else:
-            wanted_add_update.append(sroute)
+            selector = dest["name"] if dest["name"] in wanted else dest["cidr"]
+            wanted_add_update.append(module_static_routes_dict[selector])
 
-    for sroute in module_static_routes:
-        if (
-            lookup_static_route(sroute["destination"], current_static_routes, module)
-        ) is None:
+    for sroute in wanted_static_routes:
+        if (lookup_static_route(sroute, current_static_routes, module)) is None:
             wanted_add_update.append(sroute)
 
     if wanted_delete:
