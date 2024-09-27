@@ -320,9 +320,7 @@ def maas_delete_static_routes(
 
     for sroute in module_static_routes:
         if (
-            matching_route := lookup_static_route(
-                sroute["destination"], current_static_routes, module
-            )
+            matching_route := lookup_static_route(sroute, current_static_routes, module)
         ) is not None:
             sroutelist.append(sroute["destination"])
             res["changed"] = True
