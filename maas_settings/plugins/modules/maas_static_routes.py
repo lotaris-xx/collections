@@ -66,8 +66,8 @@ options:
               description: The weight of the route
               required: false
               type: int
-    extends_documentation_fragment:
-      - rhc.maas_settings.maas_auth_options
+extends_documentation_fragment:
+    - rhc.maas_settings.maas_auth_options
 notes:
    - The puppet code this is based on keys off the destination (assuming each destination
      is listed once) so this code does the same.
