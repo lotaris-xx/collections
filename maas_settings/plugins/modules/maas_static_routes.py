@@ -67,7 +67,7 @@ options:
               required: false
               type: int
     extends_documentation_fragment:
-      - rhc.maas.maas_auth_option
+      - rhc.maas_settings.maas_auth_options
 notes:
    - The puppet code this is based on keys off the destination (assuming each destination
      is listed once) so this code does the same.
