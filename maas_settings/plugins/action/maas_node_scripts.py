@@ -22,17 +22,23 @@ class ActionModule(ActionBase):
 
         validation_result, new_module_args = self.validate_argument_spec(
             argument_spec={
-                "password": {"type": "str", "required": True},
+                "password": {"type": "str"},
                 "script_dir": {"type": "str", "required": True},
                 "site": {"type": "str", "required": True},
                 "state": {"type": "str", "required": False, "default": "present"},
                 "user_scripts": {"type": "list", "required": True},
-                "username": {"type": "str", "required": True},
+                "token": {"type": "str"},
+                "username": {"type": "str"},
             },
         )
 
         result = super(ActionModule, self).run(tmp, task_vars)
         del tmp  # tmp no longer has any effect
+
+        if new_module_args["token"]:
+            del new_module_args["username"]
+            del new_module_args["password"]
+
         try:
             for user_script in new_module_args["user_scripts"]:
                 try:
