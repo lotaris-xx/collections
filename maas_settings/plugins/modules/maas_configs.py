@@ -33,22 +33,13 @@ description: Given a dictionary of MAAS config settings, this module will compar
              current setting and update as needed.
 
 options:
-    password:
-        description: Password for username used to get API token
-        required: true
-        type: str
-    site:
-        description: URL of the MAAS site (generally ending in /MAAS)
-        required: true
-        type: str
-    username:
-        description: Username to get API token for
-        required: true
-        type: str
     configs:
         description: A dictionary containing config settings
         required: true
         type: dict
+
+extends_documentation_fragment:
+    - rhc.maas_settings.maas_auth_options
 
 notes:
     - The configs are always defined on the server, even if an empty value
@@ -67,6 +58,10 @@ EXAMPLES = r"""
 -  maas_configs:
      username: user
      password: password
+     configs:
+       network_discovery: "disabled"
+-  maas_configs:
+     token: api_token
      configs:
        network_discovery: "disabled"
 """
@@ -135,14 +130,21 @@ def maas_update_config(session, configs, setting, module, res):
 def run_module():
     module_args = dict(
         configs=dict(type="dict", required=True),
-        password=dict(type="str", required=True, no_log=True),
-        username=dict(type="str", required=True),
+        password=dict(type="str", no_log=True),
+        token=dict(type="str", no_log=True),
+        username=dict(type="str"),
         site=dict(type="str", required=True),
     )
 
     result = dict(changed=False, message=[], diff={})
 
-    module = AnsibleModule(argument_spec=module_args, supports_check_mode=True)
+    module = AnsibleModule(
+        argument_spec=module_args,
+        supports_check_mode=True,
+        required_together=[["username", "password"]],
+        required_one_of=[["username", "token"], ["password", "token"]],
+        mutually_exclusive=[["username", "token"], ["password", "token"]],
+    )
 
     if not HAS_REQUESTS:
         module.fail_json(msg=missing_required_lib("requests"))
