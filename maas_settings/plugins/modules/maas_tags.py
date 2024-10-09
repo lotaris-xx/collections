@@ -35,14 +35,6 @@ version_added: "1.0.0"
 description: Configure MAAS tags
 
 options:
-    password:
-        description: Password for username used to get API token
-        required: true
-        type: str
-    site:
-        description: URL of the MAAS site (generally ending in /MAAS)
-        required: true
-        type: str
     state:
         description:
           - if C(absent) then the tag(s) will be removed if currently present.
@@ -52,10 +44,6 @@ options:
         type: str
         default: present
         choices: [ absent, present, exact ]
-    username:
-        description: Username to get API token for
-        required: true
-        type: str
     tags:
         description: A list containing tag specifier dictionaries
         required: true
@@ -79,6 +67,9 @@ options:
                            command line will be concatenated from all associated tags, in alphabetic tag name order.
               required: false
               type: int
+
+extends_documentation_fragment:
+    - rhc.maas_settings.maas_auth_options
 
 notes:
     - Source puppet facts use only names, so that code is most tested.
@@ -336,16 +327,23 @@ def maas_exact_tags(session, current_tags, module_tags, module, res):
 
 def run_module():
     module_args = dict(
-        tags=dict(type="list", required=True),
-        password=dict(type="str", required=True, no_log=True),
-        username=dict(type="str", required=True),
+        tags=dict(type="list", elements="dict", required=True),
+        password=dict(type="str", no_log=True),
+        token=dict(type="str", no_log=True),
+        username=dict(type="str"),
         site=dict(type="str", required=True),
         state=dict(type="str", required=False, default="present"),
     )
 
     result = dict(changed=False, message=[], diff={})
 
-    module = AnsibleModule(argument_spec=module_args, supports_check_mode=True)
+    module = AnsibleModule(
+        argument_spec=module_args,
+        supports_check_mode=True,
+        required_together=[["username", "password"]],
+        required_one_of=[["username", "token"], ["password", "token"]],
+        mutually_exclusive=[["username", "token"], ["password", "token"]],
+    )
 
     if not HAS_REQUESTS:
         module.fail_json(msg=missing_required_lib("requests"))
