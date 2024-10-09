@@ -36,14 +36,6 @@ version_added: "1.0.0"
 description: Configure MAAS static_routes
 
 options:
-    password:
-        description: Password for username used to get API token. Mutually excludive with O(token).
-        required: true
-        type: str
-    site:
-        description: URL of the MAAS site (generally ending in /MAAS)
-        required: true
-        type: str
     state:
         description:
           - if V(absent) then the static_route(s) will be removed if currently present.
@@ -53,10 +45,6 @@ options:
         type: str
         default: present
         choices: [ absent, present, exact ]
-    username:
-        description: Username to get API token. Mutually exclusive with O(token).
-        required: true
-        type: str
     static_routes:
         description: A list containing static_route specifier dictionaries
         required: true
@@ -78,11 +66,8 @@ options:
               description: The weight of the route
               required: false
               type: int
-    token:
-        description: API Token, a string in 3 parts separated by ':'. Mutually exclusive with O(username)/O(password).
-        required: true
-        type: string
-
+    extends_documentation_fragment:
+      - rhc.maas.maas_auth_option
 notes:
    - The puppet code this is based on keys off the destination (assuming each destination
      is listed once) so this code does the same.
