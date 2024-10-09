@@ -37,7 +37,7 @@ description: Configure MAAS static_routes
 
 options:
     password:
-        description: Password for username used to get API token
+        description: Password for username used to get API token. Mutually excludive with O(token).
         required: true
         type: str
     site:
@@ -46,15 +46,15 @@ options:
         type: str
     state:
         description:
-          - if C(absent) then the static_route(s) will be removed if currently present.
-          - if C(present) then the static_route(s) will be created/updated.
-          - if C(exact) then the resulting static_route list will match what is passed in.
+          - if V(absent) then the static_route(s) will be removed if currently present.
+          - if V(present) then the static_route(s) will be created/updated.
+          - if V(exact) then the resulting static_route list will match what is passed in.
         required: false
         type: str
         default: present
         choices: [ absent, present, exact ]
     username:
-        description: Username to get API token for
+        description: Username to get API token. Mutually exclusive with O(token).
         required: true
         type: str
     static_routes:
@@ -78,6 +78,10 @@ options:
               description: The weight of the route
               required: false
               type: int
+    token:
+        description: API Token, a string in 3 parts separated by ':'. Mutually exclusive with O(username)/O(password).
+        required: true
+        type: string
 
 notes:
    - The puppet code this is based on keys off the destination (assuming each destination
@@ -392,16 +396,23 @@ def maas_exact_static_routes(
 
 def run_module():
     module_args = dict(
-        static_routes=dict(type="list", required=True),
-        password=dict(type="str", required=True, no_log=True),
-        username=dict(type="str", required=True),
+        static_routes=dict(type="list", elements="dict", required=True),
+        password=dict(type="str", no_log=True),
+        username=dict(type="str"),
         site=dict(type="str", required=True),
         state=dict(type="str", required=False, default="present"),
+        token=dict(type="str", no_log=True),
     )
 
     result = dict(changed=False, message=[], diff={})
 
-    module = AnsibleModule(argument_spec=module_args, supports_check_mode=True)
+    module = AnsibleModule(
+        argument_spec=module_args,
+        supports_check_mode=True,
+        required_together=[["username", "password"]],
+        required_one_of=[["username", "token"], ["password", "token"]],
+        mutually_exclusive=[["username", "token"], ["password", "token"]],
+    )
 
     if not HAS_REQUESTS:
         module.fail_json(msg=missing_required_lib("requests"))
