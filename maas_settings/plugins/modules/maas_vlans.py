@@ -36,14 +36,6 @@ version_added: "1.0.0"
 description: Configure MAAS vlans
 
 options:
-    password:
-        description: Password for username used to get API token
-        required: true
-        type: str
-    site:
-        description: URL of the MAAS site (generally ending in /MAAS)
-        required: true
-        type: str
     state:
         description:
           - if C(absent) then the vlan(s) will be removed if currently present.
@@ -53,10 +45,6 @@ options:
         type: str
         default: present
         choices: [ absent, present, exact ]
-    username:
-        description: Username to get API token for
-        required: true
-        type: str
     vlans:
         description: A list containing vlan specifier dictionaries
         required: true
@@ -76,6 +64,9 @@ options:
               required: false
               default: O(name)
               type: str
+
+extends_documentation_fragment:
+    - rhc.maas_settings.maas_auth_options
 
 notes:
    - The API accepts more options for O(vlans) list members
@@ -111,8 +102,7 @@ EXAMPLES = r"""
 
 # Add/Remove as needed to exactly match given list
 -  maas_vlans:
-     username: user
-     password: password
+     token: api_token
      state: exact
      vlans:
        - name: 400
@@ -326,16 +316,23 @@ def maas_exact_vlans(session, current_vlans, module_vlans, module, res):
 
 def run_module():
     module_args = dict(
-        vlans=dict(type="list", required=True),
-        password=dict(type="str", required=True, no_log=True),
-        username=dict(type="str", required=True),
+        vlans=dict(type="list", elements="dict", required=True),
+        password=dict(type="str", no_log=True),
+        token=dict(type="str", no_log=True),
+        username=dict(type="str"),
         site=dict(type="str", required=True),
         state=dict(type="str", required=False, default="present"),
     )
 
     result = dict(changed=False, message=[], diff={})
 
-    module = AnsibleModule(argument_spec=module_args, supports_check_mode=True)
+    module = AnsibleModule(
+        argument_spec=module_args,
+        supports_check_mode=True,
+        required_together=[["username", "password"]],
+        required_one_of=[["username", "token"], ["password", "token"]],
+        mutually_exclusive=[["username", "token"], ["password", "token"]],
+    )
 
     if not HAS_REQUESTS:
         module.fail_json(msg=missing_required_lib("requests"))
