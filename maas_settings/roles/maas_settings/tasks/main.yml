@@ -1,43 +1,32 @@
 ---
-- name: Configure all settings
-  hosts: all
-  gather_facts: false
-  module_defaults:
-    group/rhc.maas_settings.maas_settings_group:
-      username: "{{ maas_username | default(omit) }}"
-      password: "{{ maas_password | default(omit) }}"
-      token: "{{ maas_token | default(omit) }}"
-      site: "{{ maas_site }}"
-      state: exact
-  tasks:
-    - name: Configure VLANs
-      rhc.maas_settings.maas_vlans:
-        vlans: "{{ maas_configs['vlans'] }}"
-      delegate_to: localhost
+- name: Configure VLANs
+  rhc.maas_settings.maas_vlans:
+    vlans: "{{ maas_configs['vlans'] }}"
+  delegate_to: localhost
 
-    - name: Configure Subnets
-      rhc.maas_settings.maas_subnets:
-        subnets: "{{ maas_configs['subnets'] + maas_configs['untagged_subnets'] }}"
-      delegate_to: localhost
+- name: Configure Subnets
+  rhc.maas_settings.maas_subnets:
+    subnets: "{{ maas_configs['subnets'] + maas_configs['untagged_subnets'] }}"
+  delegate_to: localhost
 
-    - name: Configure Node Scripts
-      rhc.maas_settings.maas_node_scripts:
-        script_dir: "{{ maas_configs['node_scripts']['scripts_dir'] }}"
-        user_scripts: "{{ maas_configs['node_scripts']['user_scripts'] }}"
-      delegate_to: localhost
+- name: Configure Node Scripts
+  rhc.maas_settings.maas_node_scripts:
+    script_dir: "{{ maas_configs['node_scripts']['scripts_dir'] }}"
+    user_scripts: "{{ maas_configs['node_scripts']['user_scripts'] }}"
+  delegate_to: localhost
 
-    - name: Configure Tags
-      rhc.maas_settings.maas_tags:
-        tags: "{{ maas_configs['tags'] }}"
-      delegate_to: localhost
+- name: Configure Tags
+  rhc.maas_settings.maas_tags:
+    tags: "{{ maas_configs['tags'] }}"
+  delegate_to: localhost
 
-    - name: Configure Maas Settings
-      rhc.maas_settings.maas_configs:
-        configs: "{{ maas_configs['maas'] }}"
-        state: "{{ omit }}"
-      delegate_to: localhost
+- name: Configure Maas Settings
+  rhc.maas_settings.maas_configs:
+    configs: "{{ maas_configs['maas'] }}"
+    state: "{{ omit }}"
+  delegate_to: localhost
 
-    - name: Configure Static Routes
-      rhc.maas_settings.maas_static_routes:
-        static_routes: "{{ maas_configs['static_routes'] }}"
-      delegate_to: localhost
+- name: Configure Static Routes
+  rhc.maas_settings.maas_static_routes:
+    static_routes: "{{ maas_configs['static_routes'] }}"
+  delegate_to: localhost
